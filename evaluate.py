@@ -14,14 +14,16 @@ from stats_func import *
 import argparse
 import medpy.io as medio
 import time
+import medpy.metric.binary as medpy_metrics
+model_list = [30599]
 
-model_list = [89999]
-
-base_fd = ''
-raw_data_pth = ''
+base_fd = '/home/zhushenghao/data/JS/Robust-Mseg-main/brats_2024'
+raw_data_pth = '/home/zhushenghao/data/JS/Robust-Mseg-main/brats_2024'
 test_list_pth = './datalist/test.txt'
 
-CHECKPOINT_PATH_LIST = ['./output/multimodal-' + str(i) for i in model_list]
+model_id = "20240923-131430"
+
+CHECKPOINT_PATH_LIST = ['./output/'+model_id+'/multimodal-' + str(i) for i in model_list]
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 DROP_RATE = 0.0
 IS_TRAINING = False
@@ -36,7 +38,7 @@ NUM_CHANNEL = 1
 LABEL_FLAG = True
 
 modality_missing_list = [
-    [0, 0, 0, 1],
+    [1, 1, 1, 1],
     [0, 1, 0, 0],
     [0, 0, 1, 0],
     [1, 0, 0, 0],
@@ -50,16 +52,16 @@ modality_missing_list = [
     [1, 0, 1, 1],
     [1, 1, 0, 1],
     [0, 1, 1, 1],
-    [1, 1, 1, 1],
+    [0, 0, 0, 1],
 ]
 
 dict_pth = '../../Data/ID_dict.npy'
 
 modality_list = [
-    'Flair',
-    'T1c',
-    'T1',
-    'T2',
+    't1c',
+    't1n',
+    't2f',
+    't2w',
 ]
 
 
@@ -132,7 +134,7 @@ class MultiModal:
         with open(test_list_pth, 'r') as fp:
             test_fids = fp.readlines()
 
-        test_fids = [base_fd+'/'+test_fid[:-1] for test_fid in test_fids]
+        test_fids = [base_fd+'/'+test_fid.strip() for test_fid in test_fids]
 
         self.model_setup()
         saver = tf.train.Saver()
@@ -180,11 +182,14 @@ class MultiModal:
                     dice_list_wt = []
                     dice_list_co = []
                     dice_list_ec = []
+                    hd95_list_wt = []
+                    hd95_list_co = []
+                    hd95_list_ec = []
                     for f_idx, fid in enumerate(test_fids):
                         data_list = []
                         starttime = time.time()
                         for modality in modality_list:
-                            image_arr, image_header = medio.load(fid + '/' + modality + '_subtrMeanDivStd.nii.gz')
+                            image_arr, image_header = medio.load(fid+'/'+fid.split('/')[-1]+ '-' + modality + '-subtrMeanDivStd.nii.gz')
                             data_list.append(image_arr)
 
                         h, w, d = image_arr.shape
@@ -263,7 +268,8 @@ class MultiModal:
                         seg_pred_compact_val = np.argmax(pred_whole, axis=-1)
                         seg_pred_compact_val = np.int16(seg_pred_compact_val)
 
-                        brainmask_arr, brainmask_header = medio.load(raw_data_pth + '/' + fid.split('/')[-1] + '/brainmask.nii.gz')
+                        brainmask_arr, brainmask_header = medio.load(raw_data_pth + '/' + fid.split('/')[-1] +'/'+fid.split('/')[-1]+ '-brainmask.nii.gz')
+
                         roi_ind = np.where(brainmask_arr > 0)
                         roi_bbx = [roi_ind[0].min(), roi_ind[0].max(), roi_ind[1].min(), roi_ind[1].max(), roi_ind[2].min(),
                                    roi_ind[2].max()]
@@ -271,11 +277,62 @@ class MultiModal:
                         pred_complete_arr[roi_bbx[0]:roi_bbx[1] + 1, roi_bbx[2]:roi_bbx[3] + 1, roi_bbx[4]:roi_bbx[5] + 1] = seg_pred_compact_val
 
                         if LABEL_FLAG:
-                            image_arr, image_header = medio.load(raw_data_pth + '/' + fid.split('/')[-1] + '/OTMultiClass.nii.gz')
+                            image_arr, image_header = medio.load(raw_data_pth + '/' + fid.split('/')[-1] +'/'+fid.split('/')[-1]+ '-seg.nii.gz')
                             dice_wt, dice_co, dice_ec = dice_stat(pred_complete_arr, image_arr)
                             dice_list_wt.append(dice_wt)
                             dice_list_co.append(dice_co)
                             dice_list_ec.append(dice_ec)
+
+                            pred_data_wt = pred_complete_arr.copy()
+                            pred_data_wt[pred_data_wt > 0] = 1
+
+                            gt_data_wt = image_arr.copy()
+                            gt_data_wt[gt_data_wt > 0] = 1
+
+                            # 核心肿瘤（Core Tumor, CT）
+                            pred_data_co = pred_complete_arr.copy()
+                            pred_data_co[pred_data_co == 2] = 0
+                            pred_data_co[pred_data_co > 0] = 1
+
+                            gt_data_co = image_arr.copy()
+                            gt_data_co[gt_data_co == 2] = 0
+                            gt_data_co[gt_data_co > 0] = 1
+
+                            # 增强边缘（Enhancing Tumor, ET）
+                            pred_data_ec = pred_complete_arr.copy()
+                            pred_data_ec[pred_data_ec == 4] = 0
+                            pred_data_ec[pred_data_ec > 0] = 1
+
+                            gt_data_ec = image_arr.copy()
+                            gt_data_ec[gt_data_ec == 4] = 0
+                            gt_data_ec[gt_data_ec > 0] = 1
+
+                            # 检查是否有前景像素存在
+                            has_foreground_wt = np.any(gt_data_wt)
+                            has_foreground_co = np.any(gt_data_co)
+                            has_foreground_ec = np.any(gt_data_ec)
+
+                            # 计算HD95
+                            if has_foreground_wt:
+                                hd95_wt = medpy_metrics.hd95(pred_data_wt, gt_data_wt)
+                            else:
+                                hd95_wt = 0.00
+
+                            if has_foreground_co:
+                                hd95_co = medpy_metrics.hd95(pred_data_co, gt_data_co)
+                            else:
+                                hd95_co = 0.00
+
+                            if has_foreground_ec:
+                                hd95_ec = medpy_metrics.hd95(pred_data_ec, gt_data_ec)
+                            else:
+                                hd95_ec = 0.00
+
+
+                            # 将HD95值添加到相应的列表中
+                            hd95_list_wt.append(hd95_wt)
+                            hd95_list_co.append(hd95_co)
+                            hd95_list_ec.append(hd95_ec)
 
                         print (fid.split('/')[-1], time.time()-starttime)
 
@@ -288,7 +345,7 @@ class MultiModal:
                             rows = [
                                 [' ', ' ', ' ', 'wt', 'co', 'ec', 'avg', ' ', 'wt', 'co', 'ec', 'avg', ' ', 'wt', 'co',
                                  'ec', 'avg',
-                                 ' ', 'wt', 'co', 'ec', ' ', 'wt', 'co', 'ec', ' ', 'wt', 'co', 'ec']]
+                                 ' ', 'wt', 'co', 'ec', ' ', 'wt', 'co', 'ec', ' ', 'wt', 'co', 'ec',' ','hd95wt','hd95co','hd95ec']]
                         dice_arr_wt = np.asarray(dice_list_wt)
                         dice_arr_co = np.asarray(dice_list_co)
                         dice_arr_ec = np.asarray(dice_list_ec)
@@ -301,18 +358,20 @@ class MultiModal:
                         dice_arr_co_std = np.std(dice_arr_co, axis=0)
                         dice_arr_ec_std = np.std(dice_arr_ec, axis=0)
 
-                        print CHECKPOINT_PATH + ' Dice:'
+                        avg_hd95_wt = np.nanmean(hd95_list_wt)
+                        avg_hd95_co = np.nanmean(hd95_list_co)
+                        avg_hd95_ec = np.nanmean(hd95_list_ec)
+
+                        print(CHECKPOINT_PATH + ' Dice:')
                         print (modality_missing_conf, modality_num_val)
                         for i in range(len(dice_arr_wt_mean)):
-                            print 'wt:%.2f(%.2f)' % (100*dice_arr_wt_mean[i], 100*dice_arr_wt_std[i])
-                            print 'co:%.2f(%.2f)' % (100*dice_arr_co_mean[i], 100*dice_arr_co_std[i])
-                            print 'ec:%.2f(%.2f)' % (100*dice_arr_ec_mean[i], 100*dice_arr_ec_std[i])
+                            print('wt:%.2f(%.2f)' % (100*dice_arr_wt_mean[i], 100*dice_arr_wt_std[i]))
+                            print('co:%.2f(%.2f)' % (100*dice_arr_co_mean[i], 100*dice_arr_co_std[i]))
+                            print('ec:%.2f(%.2f)' % (100*dice_arr_ec_mean[i], 100*dice_arr_ec_std[i]))
 
                         row = [[' ',
                                 'Modality-' + str(modality_missing_conf[0]) + str(modality_missing_conf[1]) + str(
-                                    modality_missing_conf[2]) + str(modality_missing_conf[3]) +
-                                '-filling0-' + str(filling_zero) +
-                                '-replace-' + str(replace),
+                                    modality_missing_conf[2]) + str(modality_missing_conf[3]),
                                 'Model-' + CHECKPOINT_PATH.split('/')[-1].split('-')[-1],
                                 "{0:.2f}".format(100*dice_arr_wt_mean[0]),
                                 "{0:.2f}".format(100*dice_arr_co_mean[0]),
@@ -340,10 +399,14 @@ class MultiModal:
                                 "{0:.2f}".format(100*dice_arr_wt_std[2]),
                                 "{0:.2f}".format(100*dice_arr_co_std[2]),
                                 "{0:.2f}".format(100*dice_arr_ec_std[2]),
+                                ' ',
+                                "{0:.2f}".format(avg_hd95_wt),
+                                "{0:.2f}".format(avg_hd95_co),
+                                "{0:.2f}".format(avg_hd95_ec),
                                 ]]
                         rows = rows + row
 
-                        with open(self._csv_pth, 'wb') as fp:
+                        with open(self._csv_pth, 'w') as fp:
                             csv_writer = csv.writer(fp, delimiter=';')
                             csv_writer.writerows(rows)
 

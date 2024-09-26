@@ -27,26 +27,32 @@ def _decode_samples(data_list):
     return data_vol
 
 
-def load_data(data_list_pth, data_pth, modality_list, batch_size, gt_flag, crop_size = 80, num_cls=5):
+def load_data(data_list_pth, data_pth, modality_list, batch_size, gt_flag, crop_size = 80, num_cls=3):
 
     with open(data_list_pth, 'r') as fp:
         rows = fp.readlines()
-    pid_list = [row[:-1] for row in rows]
+
+    pid_list = [row.strip() for row in rows]
+    print(pid_list)
 
     cnt = 0
     for modality in modality_list:
         cnt += 1
-        data_list = [data_pth+'/'+pid+'/'+modality+'_subtrMeanDivStd.tfrecords' for pid in pid_list]
+        data_list = [data_pth+'/'+pid+'/'+pid+'-'+modality+'-subtrMeanDivStd.tfrecords' for pid in pid_list]
+        #print(data_list)
         if cnt == 1:
             data_vol = tf.expand_dims(_decode_samples(data_list), axis=3)
         else:
             data_vol = tf.concat((data_vol, tf.expand_dims(_decode_samples(data_list), axis=3)), axis=3)
 
-    data_list = [data_pth + '/' + pid + '/' + 'brainmask.tfrecords' for pid in pid_list]
+
+    data_list = [data_pth+'/'+pid+'/'+pid+'-'+'brainmask'+'.tfrecords' for pid in pid_list]
+    print(data_list)
     brainmask = _decode_samples(data_list)
 
     if gt_flag:
-        data_list = [data_pth + '/' + pid + '/' + 'OTMultiClass.tfrecords' for pid in pid_list]
+        data_list = [data_pth+'/'+pid+'/'+pid+'-'+'seg'+'.tfrecords' for pid in pid_list]
+        print(data_list)
         label = _decode_samples(data_list)
         combine_all = tf.stack((brainmask, label), axis=3)
         combine_all = tf.concat((data_vol, combine_all), axis=3)

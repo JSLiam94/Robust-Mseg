@@ -12,7 +12,7 @@ Tensorflow implementation of our robust multimodal brain tumor segmentation fram
 * Install TensorFlow 1.10 and CUDA 9.0
 * Clone this repo
 ```
-git clone https://github.com/cchen-cc/Robust-Mseg
+git clone https://github.com/JSLiam94/Robust-Mseg.git
 cd Robust-Mseg
 ```
 

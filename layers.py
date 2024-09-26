@@ -34,6 +34,7 @@ def group_norm(x):
 
 
 
+'''
 def general_conv3d(input, o_d, k_size=3, s=1,
                    pad_type="zero", stddev = 0.01, name="conv3d",
                    drop_rate=0.0, norm_type='Ins', is_training=True, act_type='lrelu', relufactor=0.2):
@@ -70,6 +71,45 @@ def general_conv3d(input, o_d, k_size=3, s=1,
                 conv = tf.nn.leaky_relu(conv, relufactor, 'lrelu')
 
         return conv
+'''
+
+def general_conv3d(input, o_d, k_size=3, s=1,
+                   pad_type="zero", stddev = 0.01, name="conv3d",
+                   drop_rate=0.0, norm_type='Ins', is_training=True, act_type='lrelu', relufactor=0.2):
+
+    with tf.variable_scope(name):
+        pad = (k_size-1)//2
+        if pad_type == 'zero':
+            input = tf.pad(input, [[0, 0], [pad, pad], [pad, pad], [pad, pad], [0, 0]])
+        if pad_type == 'reflect':
+            input = tf.pad(input, [[0, 0], [pad, pad], [pad, pad], [pad, pad], [0, 0]], mode='REFLECT')
+
+        conv = tf.layers.conv3d(
+            input, o_d, k_size, s,
+            activation=None,
+            use_bias=True,
+            kernel_initializer=tf.truncated_normal_initializer(stddev=stddev),
+            bias_initializer=None,
+        )
+
+        conv = tf.layers.dropout(conv, drop_rate, training=is_training)
+
+        if norm_type is not None:
+            if norm_type=='Ins':
+                conv = instance_norm(conv)
+            elif norm_type=='Batch':
+                conv = batch_norm(conv, is_training)
+            elif norm_type=='Group':
+                conv = group_norm(conv)
+
+        if act_type is not None:
+            if act_type=='relu':
+                conv = tf.nn.relu(conv, "relu")
+            elif act_type=='lrelu':
+                conv = tf.nn.leaky_relu(conv, relufactor, 'lrelu')
+
+        return conv
+
 
 
 def dilate_conv2d(inputconv, i_d=64, o_d=64, f_h=7, f_w=7, rate=2, stddev=0.01,
@@ -85,7 +125,7 @@ def dilate_conv2d(inputconv, i_d=64, o_d=64, f_h=7, f_w=7, rate=2, stddev=0.01,
 
         if do_norm:
             if norm_type is None:
-                print "normalization type is not specified!"
+                print("normalization type is not specified!")
                 quit()
             elif norm_type=='Ins':
                 di_conv_2d = instance_norm(di_conv_2d)
@@ -116,7 +156,7 @@ def general_deconv2d(inputconv, outshape, o_d=64, f_h=7, f_w=7, s_h=1, s_w=1,
 
         if do_norm:
             if norm_type is None:
-                print "normalization type is not specified!"
+                print("normalization type is not specified!")
                 quit()
             elif norm_type=='Ins':
                 conv = instance_norm(conv)

@@ -1,4 +1,3 @@
-
 from datetime import datetime
 import numpy as np
 import os
@@ -7,37 +6,47 @@ import time
 
 import tensorflow as tf
 
+
 import data_loader, losses, model, modalitydrop_generator
 from utils import *
 
 from stats_func import *
 
+
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-train_data_pth = ''
+train_data_pth = './brats_all'
 train_list_pth = './datalist/train.txt'
 valid_list_pth = './datalist/test.txt'
-evaluation_interval = 10
+evaluation_interval = 2
 visual_interval = 300
-save_interval = 500
+save_interval = 600
 drop_rate_value=0.0
 is_training_value=True
 output_root_dir = './output'
+'''
 modality_list = [
     'Flair',
     'T1c',
     'T1',
     'T2',
 ]
-
-BATCH_SIZE = 1
+'''
+modality_list = [
+    't1c',
+    't1n',
+    't2f',
+    't2w',
+]
+BATCH_SIZE =1
 CROP_SIZE = 80
 NUM_CHANNEL = 1
 NUM_CLS = 5
 max_inter = 300
 max_epoch = 300
 BASE_LEARNING_RATE = 0.0001
-save_num_images = 2
+save_num_images = 10
 
 class MultiModal:
 

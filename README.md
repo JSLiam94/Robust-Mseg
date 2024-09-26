@@ -26,7 +26,7 @@ cd Robust-Mseg
 ## Evaluate
 * Our trained models can be downloaded from [Dropbox](https://www.dropbox.com/sh/euaxpyvtni1iy17/AABDOj0Q_xYdbbNnTJmlR2zpa?dl=0).
 * Specify the model path and data path in `./evaluate.py`
-* Run `./evaluate.py` to start the evaluation.
+* Run `./evaluate.py` to start the evaluation.(2024.9.20 NEW hd95 val!!)
 
 ## Citation
 If you find the code useful for your research, please consider cite our paper.
